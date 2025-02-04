@@ -1,74 +1,83 @@
 import os
 import requests
-import asyncio
+import datetime
+from dotenv import load_dotenv
 from telegram import Bot
-from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv  # Load API keys securely
 
-# Load API keys from .env file
+# Load environment variables
 load_dotenv()
-WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+
+# OpenWeather API details
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+LATITUDE = "-37.8136"  # Melbourne latitude
+LONGITUDE = "144.9631"  # Melbourne longitude
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")  # Your Telegram user ID
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-CITY = "Melbourne"
-WEATHER_URL = f"https://api.openweathermap.org/data/2.5/forecast?q={CITY}&appid={WEATHER_API_KEY}&units=metric"
+# Fetch weather forecast
+def get_weather_report(hour):
+    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={LATITUDE}&lon={LONGITUDE}&appid={OPENWEATHER_API_KEY}&units=metric"
+    response = requests.get(url)
+    data = response.json()
 
-def get_weather(target_hour):
-    """Fetch the closest available weather forecast for the target hour (8 AM or 6 PM)."""
-    try:
-        response = requests.get(WEATHER_URL, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+    # Find the closest forecast for the requested hour (8 AM or 6 PM)
+    best_match = None
+    min_difference = float("inf")
 
-        closest_forecast = None
-        closest_time_diff = float("inf")
+    for forecast in data["list"]:
+        forecast_time = datetime.datetime.utcfromtimestamp(forecast["dt"]) + datetime.timedelta(hours=11)  # Convert to Melbourne time
+        forecast_hour = forecast_time.hour
 
-        for forecast in data["list"]:
-            forecast_time = datetime.fromtimestamp(forecast["dt"], timezone.utc) + timedelta(hours=11)  # Convert to Melbourne time
-            time_diff = abs(forecast_time.hour - target_hour)
+        # Find the closest available time (since OpenWeather provides 3-hour intervals)
+        difference = abs(forecast_hour - hour)
+        if difference < min_difference:
+            min_difference = difference
+            best_match = forecast
 
-            # Choose the closest time (max 2-hour difference)
-            if time_diff <= 2 and time_diff < closest_time_diff:
-                closest_forecast = forecast
-                closest_time_diff = time_diff
+    if best_match:
+        weather_report = (
+            f"🌤️ **Melbourne Weather Report**\n"
+            f"📅 {forecast_time.strftime('%A, %d %B %Y %I:%M %p')}\n"
+            f"🌡️ Temperature: {best_match['main']['temp']}°C\n"
+            f"💧 Humidity: {best_match['main']['humidity']}%\n"
+            f"🌬️ Wind Speed: {best_match['wind']['speed']} m/s\n"
+            f"🌥️ Condition: {best_match['weather'][0]['description'].capitalize()}\n"
+        )
+        return weather_report
+    else:
+        return "⚠️ Weather data is not available."
 
-        if closest_forecast:
-            forecast_time = datetime.fromtimestamp(closest_forecast["dt"], timezone.utc) + timedelta(hours=11)
-            weather_desc = closest_forecast["weather"][0]["description"].capitalize()
-            temp = closest_forecast["main"]["temp"]
-            humidity = closest_forecast["main"]["humidity"]
-            wind_speed = closest_forecast["wind"]["speed"]
+# Fetch weather alerts
+def get_weather_alerts():
+    url = f"https://api.openweathermap.org/data/3.0/onecall?lat={LATITUDE}&lon={LONGITUDE}&appid={OPENWEATHER_API_KEY}&units=metric"
+    response = requests.get(url)
+    data = response.json()
 
-            return (
-                f"🌤️ **Melbourne Weather Report**\n"
-                f"📅 {forecast_time.strftime('%A, %d %B %Y %I:%M %p')}\n"
-                f"🌡️ Temperature: {temp}°C\n"
-                f"💧 Humidity: {humidity}%\n"
-                f"🌬️ Wind Speed: {wind_speed} m/s\n"
-                f"🌥️ Condition: {weather_desc}"
-            )
+    if "alerts" in data:
+        alerts = data["alerts"]
+        alert_messages = "\n".join([f"⚠️ {alert['event']}: {alert['description']}" for alert in alerts])
+        return alert_messages
+    return None
 
-        return f"⚠️ No weather data available near {target_hour}:00."
-
-    except requests.exceptions.RequestException as e:
-        return f"🚨 Weather API error: {e}"
-
-async def send_telegram_message(target_hour):
-    """Fetch weather and send an alert via Telegram bot."""
-    weather_message = get_weather(target_hour)
+# Send Telegram message
+def send_telegram_message(message):
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    
-    try:
-        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=weather_message, parse_mode="Markdown")
-        print(f"✅ Telegram message sent ({target_hour}:00): {weather_message}")
-    except Exception as e:
-        print(f"❌ Error sending Telegram message: {e}")
+    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
 
-# Run async functions correctly
-async def main():
-    await send_telegram_message(8)   # Morning report
-    await send_telegram_message(18)  # Evening report
+# Main function
+def main():
+    now = datetime.datetime.now()
+    hour = now.hour
+
+    if hour == 8 or hour == 18:
+        weather_report = get_weather_report(hour)
+        weather_alerts = get_weather_alerts()
+
+        final_message = weather_report
+        if weather_alerts:
+            final_message += f"\n\n🚨 *Weather Alerts:*\n{weather_alerts}"
+
+        send_telegram_message(final_message)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
