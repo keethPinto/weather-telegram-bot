@@ -30,7 +30,7 @@ if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID or not OPENWEATHER_API_KEY:
     exit(1)
 
 def get_weather_report(target_hour):
-    """Fetch weather data for the specified hour, with ±1 hour tolerance."""
+    """Fetch weather data for the specified hour (08:00 AM or 06:00 PM)."""
     url = f"http://api.openweathermap.org/data/2.5/forecast?q={CITY},{COUNTRY}&appid={OPENWEATHER_API_KEY}&units=metric"
     response = requests.get(url)
 
@@ -44,13 +44,14 @@ def get_weather_report(target_hour):
         logging.error("Invalid response structure from OpenWeather API.")
         return None
 
+    # Convert API timestamps to Melbourne time
     tz = pytz.timezone(TIMEZONE)
-
     for forecast in data["list"]:
-        dt = datetime.fromtimestamp(forecast["dt"], tz)
+        timestamp = forecast["dt"]
+        dt = datetime.fromtimestamp(timestamp, tz)
         hour = dt.hour
 
-        if abs(hour - target_hour) <= 1:
+        if hour == target_hour:
             temperature = forecast["main"]["temp"]
             humidity = forecast["main"]["humidity"]
             wind_speed = forecast["wind"]["speed"]
@@ -96,14 +97,14 @@ def send_telegram_message(message):
 def main():
     """Main function to send weather updates at 08:00 AM and 06:00 PM."""
     logging.info("Weather script started.")
-
+    
     now = datetime.now(pytz.timezone(TIMEZONE))
     hour = now.hour
 
     if hour == 8:
         target_hour = 8
     elif hour == 18:
-        target_hour = 18  # Now that DST is over, 6 PM = 18:00 is accurate
+        target_hour = 17  # OpenWeather API provides data for 5 PM instead of 6 PM
     else:
         logging.warning(f"Script executed at {hour}:00, but it's not a scheduled time.")
         exit(1)
