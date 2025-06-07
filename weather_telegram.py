@@ -1,5 +1,6 @@
 import os
 import requests
+<<<<<<< HEAD
 import json
 import logging
 from dotenv import load_dotenv
@@ -116,3 +117,5 @@ def main():
 if __name__ == "__main__":
     main()
 
+=======
+>>>>>>> 720694830a1b1e6cd706a99e24b4ccebde2b700b
