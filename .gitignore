@@ -1,5 +1,22 @@
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # Ignore virtual environment
 myenv/
 
-# Ignore API keys
+# Ignore .env file containing secrets
 .env
+
+# Ignore SSH private keys
+github-actions-key
+github-actions-key.pub
+
+# Ignore weather log file
+weather_log.txt
+
+# Optional: VS Code settings (if using VS Code)
+.vscode/
+
