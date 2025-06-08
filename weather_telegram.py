@@ -114,5 +114,4 @@ def main():
         send_telegram_message(weather_report)
 
 if __name__ == "__main__":
-    main()
-# test CI/CD    
+    main()    
